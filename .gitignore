@@ -42,3 +42,6 @@ next-env.d.ts
 
 # customer feedback data - never commit this
 feedback.xlsx
+
+# Microsoft Office temp files
+~$*
