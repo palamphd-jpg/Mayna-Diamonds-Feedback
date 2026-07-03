@@ -1,7 +1,4 @@
 import { NextResponse } from "next/server";
-import ExcelJS from "exceljs";
-import path from "path";
-import fs from "fs";
 
 export async function POST(request: Request) {
   try {
@@ -16,50 +13,34 @@ export async function POST(request: Request) {
       );
     }
 
-    // Path to the Excel file
-    const filePath = path.join(process.cwd(), "feedback.xlsx");
-    const workbook = new ExcelJS.Workbook();
-    let worksheet;
+    const scriptUrl = process.env.GOOGLE_SCRIPT_URL;
 
-    // Check if file exists
-    if (fs.existsSync(filePath)) {
-      await workbook.xlsx.readFile(filePath);
-      worksheet = workbook.getWorksheet(1);
-    } else {
-      // Create new file with headers
-      worksheet = workbook.addWorksheet("Feedback");
-      worksheet.columns = [
-        { header: "Timestamp", key: "timestamp", width: 25 },
-        { header: "Name", key: "name", width: 20 },
-        { header: "Phone", key: "phone", width: 15 },
-        { header: "Staff Experience", key: "staffExperience", width: 30 },
-        { header: "Rating", key: "rating", width: 10 },
-        { header: "Comments", key: "comments", width: 50 },
-      ];
-      
-      // Make headers bold
-      worksheet.getRow(1).font = { bold: true };
+    if (!scriptUrl) {
+      console.error("GOOGLE_SCRIPT_URL environment variable is not set");
+      return NextResponse.json(
+        { error: "Server configuration error: Google Script URL not configured" },
+        { status: 500 }
+      );
     }
 
-    if (!worksheet) {
-        return NextResponse.json(
-            { error: "Failed to initialize worksheet" },
-            { status: 500 }
-        );
-    }
-
-    // Append new row
-    worksheet.addRow({
-      timestamp: new Date().toLocaleString(),
-      name,
-      phone,
-      staffExperience,
-      rating,
-      comments,
+    // Forward data to Google Apps Script (which writes to Google Sheets)
+    const response = await fetch(scriptUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ rating, name, phone, staffExperience, comments }),
     });
 
-    // Save to disk
-    await workbook.xlsx.writeFile(filePath);
+    if (!response.ok) {
+      throw new Error(`Google Script responded with status: ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (result.status === "error") {
+      throw new Error(result.message);
+    }
 
     return NextResponse.json({ success: true, message: "Feedback saved successfully" });
   } catch (error) {
